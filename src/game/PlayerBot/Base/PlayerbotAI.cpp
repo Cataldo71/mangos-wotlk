@@ -5517,8 +5517,17 @@ bool PlayerbotAI::Buff(uint32 spellId, Unit* target, void (*beforeCast)(Player*)
 
         int32 bonus = m_bot->CalculateSpellDamage(target, spellProto, SpellEffectIndex(i));
         Unit::AuraList const& auras = target->GetAurasByType(AuraType(spellProto->EffectApplyAuraName[i]));
-        for (Unit::AuraList::const_iterator it = auras.begin(); it != auras.end() && !willBenefitFromSpell; ++it)
+		// Change - need to go through the whole list of aura's and not just jump out as soon as we find one overwritable buffs. For
+		// stackable buffs (for example Sta food buff + priest fortitude) we may have a low level aura that we can stack on top of. If we jump
+		// out after comparing against the low level aura we'll keep trying to overwrite it.
+		//
+        for (Unit::AuraList::const_iterator it = auras.begin(); it != auras.end() /* && !willBenefitFromSpell */; ++it)
         {
+			if (target->HasAura(spellId, (*it)->GetEffIndex())) {
+				// short circuit if this exact spell is already present. 
+				// avoid constant recasts when AI fails to identify stackable spells.
+				return false;
+			}
             //DEBUG_LOG("...m_amount (%d) vs bonus (%d)", (*it)->GetModifier()->m_amount, bonus);
             if ((*it)->GetModifier()->m_miscvalue == spellProto->EffectMiscValue[i])
             {
@@ -5528,7 +5537,12 @@ bool PlayerbotAI::Buff(uint32 spellId, Unit* target, void (*beforeCast)(Player*)
                 {
                     //DEBUG_LOG("...Will benefit!");
                     willBenefitFromSpell = true;
-                }
+				}
+				else
+					willBenefitFromSpell = false; // reset to false if we find a greater buff of this type
+					// note: just resetting this does not fix the entire problem. there is a chance that the bot may
+					// not buff when they should if there is a stackable buff that is higher than the buff being applied.
+					// really need a way to figure out if 2 auras stack and then this logic could get cleaned up and optimized
             }
             //DEBUG_LOG("...willBenefit: %d", willBenefitFromSpell);
         }

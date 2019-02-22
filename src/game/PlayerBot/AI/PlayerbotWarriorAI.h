@@ -118,6 +118,11 @@ class PlayerbotWarriorAI : PlayerbotClassAI
         CombatManeuverReturns DoNextCombatManeuverPVE(Unit* pTarget);
         CombatManeuverReturns DoFirstCombatManeuverPVP(Unit* pTarget);
         CombatManeuverReturns DoNextCombatManeuverPVP(Unit* pTarget);
+		int combatRotationIndex = 0;
+		std::vector<uint32> protectionRotation;
+		std::vector<uint32> debuffs;
+		std::vector<uint32> buffs;
+		std::vector<uint32> lowHealthBuffs;
 
         // ARMS
         uint32 BATTLE_STANCE,
