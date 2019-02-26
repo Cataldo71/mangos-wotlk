@@ -103,6 +103,7 @@ class PlayerbotWarriorAI : PlayerbotClassAI
         CombatManeuverReturns DoFirstCombatManeuver(Unit* pTarget);
         CombatManeuverReturns DoNextCombatManeuver(Unit* pTarget);
         bool Pull();
+		void SetRotation(uint32 spec);
 
         // all non combat actions go here, ex buffs, heals, rezzes
         void DoNonCombatActions();
@@ -118,11 +119,11 @@ class PlayerbotWarriorAI : PlayerbotClassAI
         CombatManeuverReturns DoNextCombatManeuverPVE(Unit* pTarget);
         CombatManeuverReturns DoFirstCombatManeuverPVP(Unit* pTarget);
         CombatManeuverReturns DoNextCombatManeuverPVP(Unit* pTarget);
-		int combatRotationIndex = 0;
-		std::vector<uint32> protectionRotation;
-		std::vector<uint32> debuffs;
-		std::vector<uint32> buffs;
-		std::vector<uint32> lowHealthBuffs;
+
+		// spec specific combat manuevers to keep the code clean
+		CombatManeuverReturns NextCombatMovePVEProtection(Unit* pTarget);
+		CombatManeuverReturns NextCombatMovePVEArms(Unit* pTarget);
+		CombatManeuverReturns NextCombatMovePVEFury(Unit* pTarget);
 
         // ARMS
         uint32 BATTLE_STANCE,

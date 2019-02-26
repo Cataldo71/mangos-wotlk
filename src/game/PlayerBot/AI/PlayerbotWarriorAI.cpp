@@ -95,23 +95,6 @@ PlayerbotWarriorAI::PlayerbotWarriorAI(Player* const master, Player* const bot, 
     TASTE_FOR_BLOOD         = m_ai->initSpell(TASTE_FOR_BLOOD_1);
     SUDDEN_DEATH            = m_ai->initSpell(SUDDEN_DEATH_1);
 
-	//If we have devastate it will replace SA in our rotation
-	uint32 SUNDER = (DEVASTATE > 0 ? DEVASTATE : SUNDER_ARMOR);
-
-	protectionRotation.push_back(SHIELD_BASH);
-	protectionRotation.push_back(SUNDER);
-	protectionRotation.push_back(HEROIC_STRIKE);
-
-	debuffs.push_back(THUNDER_CLAP);
-	debuffs.push_back(DEMORALIZING_SHOUT);
-
-	buffs.push_back(BLOODRAGE);
-	buffs.push_back(BATTLE_SHOUT);
-	// shield block seems to be broken - says its ready when its not.
-	//buffs.push_back(SHIELD_BLOCK);
-
-	lowHealthBuffs.push_back(LAST_STAND);
-	lowHealthBuffs.push_back(SHIELD_WALL);
 	
 }
 PlayerbotWarriorAI::~PlayerbotWarriorAI() {}
@@ -119,8 +102,8 @@ PlayerbotWarriorAI::~PlayerbotWarriorAI() {}
 CombatManeuverReturns PlayerbotWarriorAI::DoFirstCombatManeuver(Unit* pTarget)
 {
 	// reset the rotation index
-	combatRotationIndex = 0;
-
+	m_combatRotationIndex = 0;
+	SetRotation(m_bot->GetSpec());
     // There are NPCs in BGs and Open World PvP, so don't filter this on PvP scenarios (of course if PvP targets anyone but tank, all bets are off anyway)
     // Wait until the tank says so, until any non-tank gains aggro or X seconds - whichever is shortest
     if (m_ai->GetCombatOrder() & PlayerbotAI::ORDERS_TEMP_WAIT_TANKAGGRO)
@@ -383,160 +366,152 @@ CombatManeuverReturns PlayerbotWarriorAI::DoNextCombatManeuverPVE(Unit* pTarget)
                 return RETURN_CONTINUE;
 
         case WARRIOR_SPEC_PROTECTION:
-			// interrupt casters
-			//
-			Spell *pSpell = pTarget->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-			if (!pSpell)
-				pSpell = pTarget->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
-			if (pSpell) {
-				if (PUMMEL > 0 && m_ai->CastSpell(PUMMEL, *pTarget))
-					return RETURN_CONTINUE;
-				if (SPELL_REFLECTION > 0 && !m_bot->HasAura(SPELL_REFLECTION, EFFECT_INDEX_0) && m_ai->CastSpell(SPELL_REFLECTION, *m_bot))
-					return RETURN_CONTINUE;
-			}
+			return NextCombatMovePVEProtection(pTarget);
 
-			// check if i can taunt
-			//
-            if (m_ai->GetCombatOrder() && PlayerbotAI::ORDERS_TANK && !newTarget && TAUNT > 0 && m_bot->IsSpellReady(TAUNT) && m_ai->CastSpell(TAUNT, *pTarget))
-                return RETURN_CONTINUE;
 
-			// Check my debuffs on the target
-			//
-			for (std::vector<uint32>::iterator dbiter = debuffs.begin(); dbiter != debuffs.end(); dbiter++) 
-			{
-				if (*dbiter > 0 && !pTarget->HasAura(*dbiter) && m_bot->IsSpellReady(*dbiter) && m_ai->CastSpell(*dbiter, *pTarget)) {
-					std::string spellName(GetSpellStore()->LookupEntry<SpellEntry>(*dbiter)->SpellName[0]);
-
-					m_ai->SendWhisper("Casting Debuff index " + spellName, *m_master);
-
-					return RETURN_CONTINUE;
-				}
-			}
-			// check my self combat buffs
-			//
-			for (std::vector<uint32>::iterator iter = buffs.begin(); iter != buffs.end(); iter++)
-			{
-				if (*iter > 0 && !m_bot->HasAura(*iter) && m_bot->IsSpellReady(*iter) && m_ai->CastSpell(*iter, *m_bot)) {
-					std::string spellName(GetSpellStore()->LookupEntry<SpellEntry>(*iter)->SpellName[0]);
-					m_ai->SendWhisper("Casting Buff index " + spellName, *m_master);
-					return RETURN_CONTINUE;
-				}
-			}
-
-			// buffs and debuffs handled - do next in our rotation.
-			//
-			if (protectionRotation[combatRotationIndex] > 0 && m_bot->IsSpellReady(protectionRotation[combatRotationIndex]) && m_ai->CastSpell(protectionRotation[combatRotationIndex]))
-			{
-
-				m_ai->SendWhisper("Casting Rotation index " + std::to_string(combatRotationIndex), *m_master);
-				if (++combatRotationIndex == protectionRotation.size())
-					combatRotationIndex = 0;
-				return RETURN_CONTINUE;
-			}
-			else {
-				// if we couldnt do our next rotation, leave the rotation index alone and try a heroic strike
-				//
-				if (HEROIC_STRIKE > 0 && m_ai->CastSpell(HEROIC_STRIKE, *pTarget))
-					return RETURN_CONTINUE;
-			}
-			// rotation
-			//
-			//if (THUNDER_CLAP > 0 && !pTarget->HasAura(THUNDER_CLAP) && m_ai->CastSpell(THUNDER_CLAP, *pTarget))
-			//	return RETURN_CONTINUE;
-			//if (SHIELD_SLAM > 0 && m_bot->IsSpellReady(SHIELD_SLAM) && m_ai->CastSpell(SHIELD_SLAM, *pTarget))
-			//	return RETURN_CONTINUE;
-			//if (SUNDER > 0 && !pTarget->HasAura(SUNDER_ARMOR) && m_ai->CastSpell(SUNDER, *pTarget))
-			//	return RETURN_CONTINUE;
-			//if (HEROIC_STRIKE > 0 && m_ai->CastSpell(HEROIC_STRIKE, *pTarget))
-			//	return RETURN_CONTINUE;
-			//if (SHOCKWAVE > 0 && m_bot->IsSpellReady(SHOCKWAVE) && m_ai->CastSpell(SHOCKWAVE, *pTarget))
-			//	return RETURN_CONTINUE;
-			//if (SHIELD_BLOCK > 0 && !m_bot->HasAura(SHIELD_BLOCK, EFFECT_INDEX_0) && m_ai->CastSpell(SHIELD_BLOCK, *m_bot))
-			//	return RETURN_CONTINUE;
-   //         // No way to tell if revenge is active (yet)
-   //         /*if (REVENGE > 0 && m_ai->CastSpell(REVENGE, *pTarget))
-   //             return RETURN_CONTINUE;*/
-   //         if (REND > 0 && !pTarget->HasAura(REND, EFFECT_INDEX_0) && m_ai->CastSpell(REND, *pTarget))
-   //             return RETURN_CONTINUE;
-
-   //         if (DEMORALIZING_SHOUT > 0 && !pTarget->HasAura(DEMORALIZING_SHOUT, EFFECT_INDEX_0) && m_ai->CastSpell(DEMORALIZING_SHOUT, *pTarget))
-   //             return RETURN_CONTINUE;
-   //         if (CONCUSSION_BLOW > 0 && m_bot->IsSpellReady(CONCUSSION_BLOW) && m_ai->CastSpell(CONCUSSION_BLOW, *pTarget))
-   //             return RETURN_CONTINUE;
-
-			//if (DISARM > 0 && !pTarget->HasAura(DISARM, EFFECT_INDEX_0) && m_ai->CastSpell(DISARM, *pTarget))
-			//	return RETURN_CONTINUE;
-
-			//if (SHIELD_WALL > 0 && !m_bot->HasAura(SHIELD_WALL, EFFECT_INDEX_0) && m_ai->CastSpell(SHIELD_WALL, *m_bot))
-			//	return RETURN_CONTINUE;
-
-            /*case WarriorSpellPreventing:
-                if (SHIELD_BASH > 0 && m_ai->CastSpell(SHIELD_BASH, *pTarget))
-                    return RETURN_CONTINUE;
-                if (PUMMEL > 0 && m_ai->CastSpell(PUMMEL, *pTarget))
-                    return RETURN_CONTINUE;
-                if (SPELL_REFLECTION > 0 && !m_bot->HasAura(SPELL_REFLECTION, EFFECT_INDEX_0) && m_ai->CastSpell(SPELL_REFLECTION, *m_bot))
-                    return RETURN_CONTINUE;
-                break;
-
-            case WarriorBattle:
-                if (LAST_STAND > 0 && !m_bot->HasAura(LAST_STAND, EFFECT_INDEX_0) && m_bot->GetHealthPercent() < 50 && m_ai->CastSpell(LAST_STAND, *m_bot))
-                    return RETURN_CONTINUE;
-                if (DEATH_WISH > 0 && !m_bot->HasAura(DEATH_WISH, EFFECT_INDEX_0) && m_ai->CastSpell(DEATH_WISH, *m_bot))
-                    return RETURN_CONTINUE;
-                if (RETALIATION > 0 && pVictim == m_bot && m_ai->GetAttackerCount() >= 2 && !m_bot->HasAura(RETALIATION, EFFECT_INDEX_0) && m_ai->CastSpell(RETALIATION, *m_bot))
-                    return RETURN_CONTINUE;
-                if (SWEEPING_STRIKES > 0 && m_ai->GetAttackerCount() >= 2 && !m_bot->HasAura(SWEEPING_STRIKES, EFFECT_INDEX_0) && m_ai->CastSpell(SWEEPING_STRIKES, *m_bot))
-                    return RETURN_CONTINUE;
-                if (INTIMIDATING_SHOUT > 0 && m_ai->GetAttackerCount() > 5 && m_ai->CastSpell(INTIMIDATING_SHOUT, *pTarget))
-                    return RETURN_CONTINUE;
-                if (ENRAGED_REGENERATION > 0 && !m_bot->HasAura(BERSERKER_RAGE, EFFECT_INDEX_0) && !m_bot->HasAura(ENRAGED_REGENERATION, EFFECT_INDEX_0) && m_bot->GetHealth() < m_bot->GetMaxHealth() * 0.5 && m_ai->CastSpell(ENRAGED_REGENERATION, *m_bot))
-                    return RETURN_CONTINUE;
-                if (HAMSTRING > 0 && !pTarget->HasAura(HAMSTRING, EFFECT_INDEX_0) && m_ai->CastSpell(HAMSTRING, *pTarget))
-                    return RETURN_CONTINUE;
-                if (CHALLENGING_SHOUT > 0 && pVictim != m_bot && m_ai->GetHealthPercent() > 25 && !pTarget->HasAura(MOCKING_BLOW, EFFECT_INDEX_0) && !pTarget->HasAura(CHALLENGING_SHOUT, EFFECT_INDEX_0) && m_ai->CastSpell(CHALLENGING_SHOUT, *pTarget))
-                    return RETURN_CONTINUE;
-                if (CLEAVE > 0 && m_ai->CastSpell(CLEAVE, *pTarget))
-                    return RETURN_CONTINUE;
-                if (PIERCING_HOWL > 0 && && m_ai->GetAttackerCount() >= 3 && !pTarget->HasAura(WAR_STOMP, EFFECT_INDEX_0) && !pTarget->HasAura(PIERCING_HOWL, EFFECT_INDEX_0) && !pTarget->HasAura(SHOCKWAVE, EFFECT_INDEX_0) && !pTarget->HasAura(CONCUSSION_BLOW, EFFECT_INDEX_0) && m_ai->CastSpell(PIERCING_HOWL, *pTarget))
-                    return RETURN_CONTINUE;
-                if (MOCKING_BLOW > 0 && pVictim != m_bot && m_ai->GetHealthPercent() > 25 && !pTarget->HasAura(MOCKING_BLOW, EFFECT_INDEX_0) && !pTarget->HasAura(CHALLENGING_SHOUT, EFFECT_INDEX_0) && m_ai->CastSpell(MOCKING_BLOW, *pTarget))
-                    return RETURN_CONTINUE;
-                if (HEROIC_THROW > 0 && m_ai->CastSpell(HEROIC_THROW, *pTarget))
-                    return RETURN_CONTINUE;
-                if (m_bot->getRace() == RACE_TAUREN && !pTarget->HasAura(WAR_STOMP, EFFECT_INDEX_0) && !pTarget->HasAura(PIERCING_HOWL, EFFECT_INDEX_0) && !pTarget->HasAura(SHOCKWAVE, EFFECT_INDEX_0) && !pTarget->HasAura(CONCUSSION_BLOW, EFFECT_INDEX_0) && m_ai->CastSpell(WAR_STOMP, *pTarget))
-                    return RETURN_CONTINUE;
-                if (m_bot->getRace() == RACE_HUMAN && m_bot->hasUnitState(UNIT_STAT_STUNNED) || m_bot->HasAuraType(SPELL_AURA_MOD_FEAR) || m_bot->HasAuraType(SPELL_AURA_MOD_DECREASE_SPEED) || m_bot->HasAuraType(SPELL_AURA_MOD_CHARM) && m_ai->CastSpell(EVERY_MAN_FOR_HIMSELF, *m_bot))
-                    return RETURN_CONTINUE;
-                if (m_bot->getRace() == RACE_UNDEAD && m_bot->HasAuraType(SPELL_AURA_MOD_FEAR) || m_bot->HasAuraType(SPELL_AURA_MOD_CHARM) && m_ai->CastSpell(WILL_OF_THE_FORSAKEN, *m_bot))
-                    return RETURN_CONTINUE;
-                if (m_bot->getRace() == RACE_DWARF && m_bot->HasAuraState(AURA_STATE_DEADLY_POISON) && m_ai->CastSpell(STONEFORM, *m_bot))
-                    return RETURN_CONTINUE;
-                if (m_bot->getRace() == RACE_GNOME && m_bot->hasUnitState(UNIT_STAT_STUNNED) || m_bot->HasAuraType(SPELL_AURA_MOD_DECREASE_SPEED) && m_ai->CastSpell(ESCAPE_ARTIST, *m_bot))
-                    return RETURN_CONTINUE;
-                if (m_bot->getRace() == RACE_NIGHTELF && pVictim == m_bot && m_ai->GetHealthPercent() < 25 && !m_bot->HasAura(SHADOWMELD, EFFECT_INDEX_0) && m_ai->CastSpell(SHADOWMELD, *m_bot))
-                    return RETURN_CONTINUE;
-                if (m_bot->getRace() == RACE_ORC && !m_bot->HasAura(BLOOD_FURY, EFFECT_INDEX_0) && m_ai->CastSpell(BLOOD_FURY, *m_bot))
-                    return RETURN_CONTINUE;
-                if (m_bot->getRace() == RACE_TROLL && !m_bot->HasAura(BERSERKING, EFFECT_INDEX_0) && m_ai->CastSpell(BERSERKING, *m_bot))
-                    return RETURN_CONTINUE;
-                if (m_bot->getRace() == RACE_DRAENEI && m_ai->GetHealthPercent() < 25 && !m_bot->HasAura(GIFT_OF_THE_NAARU, EFFECT_INDEX_0) && m_ai->CastSpell(GIFT_OF_THE_NAARU, *m_bot))
-                    return RETURN_CONTINUE;
-                break;
-
-            case WarriorDefensive:
-                if (DISARM > 0 && !pTarget->HasAura(DISARM, EFFECT_INDEX_0) && m_ai->CastSpell(DISARM, *pTarget))
-                    return RETURN_CONTINUE;
-                if (SHIELD_BLOCK > 0 && !m_bot->HasAura(SHIELD_BLOCK, EFFECT_INDEX_0) && m_ai->CastSpell(SHIELD_BLOCK, *m_bot))
-                    return RETURN_CONTINUE;
-                if (SHIELD_WALL > 0 && !m_bot->HasAura(SHIELD_WALL, EFFECT_INDEX_0) && m_ai->CastSpell(SHIELD_WALL, *m_bot))
-                    return RETURN_CONTINUE;
-                break;*/
     }
 
     return RETURN_NO_ACTION_OK;
 }
+CombatManeuverReturns PlayerbotWarriorAI::NextCombatMovePVEArms(Unit* pTarget)
+{
+	return RETURN_NO_ACTION_OK;
+}
 
+CombatManeuverReturns PlayerbotWarriorAI::NextCombatMovePVEFury(Unit* pTarget)
+{
+	return RETURN_NO_ACTION_OK;
+}
+
+/*
+* Parameters: pTarget - the target of the combat move
+* Description: AI for protection warrior combat move
+*/
+CombatManeuverReturns PlayerbotWarriorAI::NextCombatMovePVEProtection(Unit* pTarget) 
+{
+
+	//Used to determine if this bot is highest on threat
+	Unit* newTarget = m_ai->FindAttacker((PlayerbotAI::ATTACKERINFOTYPE)(PlayerbotAI::AIT_VICTIMSELF | PlayerbotAI::AIT_HIGHESTTHREAT), m_bot);
+	// interrupt casters
+	//
+	Spell *pSpell = pTarget->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+	if (!pSpell)
+		pSpell = pTarget->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+	if (pSpell) {
+		if (PUMMEL > 0 && m_ai->CastSpell(PUMMEL, *pTarget))
+			return RETURN_CONTINUE;
+		if (SPELL_REFLECTION > 0 && !m_bot->HasAura(SPELL_REFLECTION, EFFECT_INDEX_0) && m_ai->CastSpell(SPELL_REFLECTION, *m_bot))
+			return RETURN_CONTINUE;
+	}
+	// emergency? % check should be configurable
+	if (m_bot->GetHealthPercent() < 20 && m_rotationMap[ROTATION_EMERGENCY].size()) {
+		for (std::vector<uint32>::iterator eit = m_rotationMap[ROTATION_EMERGENCY].begin(); eit != m_rotationMap[ROTATION_EMERGENCY].end(); ++eit)
+		{
+			if (*eit > 0 && !m_bot->HasAura(*eit) && m_bot->IsSpellReady(*eit) && m_ai->CastSpell(*eit, *m_bot))
+			{
+				std::string spellName(GetSpellStore()->LookupEntry<SpellEntry>(*eit)->SpellName[0]);
+				m_ai->TellMaster("EMERGENCY CAST: " + spellName);
+				return RETURN_CONTINUE;
+			}
+		}
+	}
+
+	// check if i can taunt
+	//
+	if (m_ai->GetCombatOrder() && PlayerbotAI::ORDERS_TANK && !newTarget && TAUNT > 0 && m_bot->IsSpellReady(TAUNT) && m_ai->CastSpell(TAUNT, *pTarget))
+		return RETURN_CONTINUE;
+
+	// Check my debuffs on the target
+	//
+	for (std::vector<uint32>::iterator dbiter = m_rotationMap[ROTATION_DEBUFF].begin(); dbiter != m_rotationMap[ROTATION_DEBUFF].end(); dbiter++)
+	{
+		if (*dbiter > 0 && !pTarget->HasAura(*dbiter) && m_bot->IsSpellReady(*dbiter) && m_ai->CastSpell(*dbiter, *pTarget)) {
+			std::string spellName(GetSpellStore()->LookupEntry<SpellEntry>(*dbiter)->SpellName[0]);
+
+			m_ai->SendWhisper("Casting Debuff index " + spellName, *m_master);
+
+			return RETURN_CONTINUE;
+		}
+	}
+	// check my self combat buffs
+	//
+	for (std::vector<uint32>::iterator iter = m_rotationMap[ROTATION_BUFF].begin(); iter != m_rotationMap[ROTATION_BUFF].end(); iter++)
+	{
+		if (*iter > 0 && !m_bot->HasAura(*iter) && m_bot->IsSpellReady(*iter) && m_ai->CastSpell(*iter, *m_bot)) {
+			std::string spellName(GetSpellStore()->LookupEntry<SpellEntry>(*iter)->SpellName[0]);
+			m_ai->TellMaster("Casting Buff " + spellName);
+			return RETURN_CONTINUE;
+		}
+	}
+
+	// buffs and debuffs handled - do next in our rotation.
+	//
+	if (m_rotationMap[ROTATION_NORMAL][m_combatRotationIndex] > 0 && m_bot->IsSpellReady(m_rotationMap[ROTATION_NORMAL][m_combatRotationIndex]) && m_ai->CastSpell(m_rotationMap[ROTATION_NORMAL][m_combatRotationIndex]))
+	{
+		std::string spellName(GetSpellStore()->LookupEntry<SpellEntry>(m_rotationMap[ROTATION_NORMAL][m_combatRotationIndex])->SpellName[0]);
+		m_ai->TellMaster("Casting Rotation -  " + spellName);
+		if (++m_combatRotationIndex == m_rotationMap[ROTATION_NORMAL].size())
+			m_combatRotationIndex = 0;
+		return RETURN_CONTINUE;
+	}
+	else {
+		// if we couldnt do our next rotation, leave the rotation index alone and try a heroic strike
+		//
+		if (HEROIC_STRIKE > 0 && m_ai->CastSpell(HEROIC_STRIKE, *pTarget))
+			return RETURN_CONTINUE;
+	}
+	return RETURN_NO_ACTION_OK;
+}
+
+// set the rotations for 
+void PlayerbotWarriorAI::SetRotation(uint32 spec)
+{
+	switch (spec)
+	{
+	case WARRIOR_SPEC_PROTECTION:
+	{
+		//If we have devastate it will replace SA in our rotation
+		uint32 SUNDER = (DEVASTATE > 0 ? DEVASTATE : SUNDER_ARMOR);
+
+		// standard rotation for prot warrior
+		std::vector<uint32> protectionRotation;
+		protectionRotation.push_back(SHIELD_BASH);
+		protectionRotation.push_back(SUNDER);
+		protectionRotation.push_back(HEROIC_STRIKE);
+		m_rotationMap.insert(RotationMap::value_type(ROTATION_NORMAL, protectionRotation));
+
+		// debuffs to keep on the target
+		std::vector<uint32> debuffs;
+		debuffs.push_back(THUNDER_CLAP);
+		debuffs.push_back(DEMORALIZING_SHOUT);
+		m_rotationMap.insert(RotationMap::value_type(ROTATION_DEBUFF, debuffs));
+
+		// buffs to have up all the time.
+		std::vector<uint32> buffs;
+		buffs.push_back(BLOODRAGE);
+		buffs.push_back(BATTLE_SHOUT);
+		// shield block seems to be broken - says its ready when its not.
+		//buffs.push_back(SHIELD_BLOCK);
+		m_rotationMap.insert(RotationMap::value_type(ROTATION_BUFF, buffs));
+
+		// emergency skills 
+		std::vector<uint32> lowHealthBuffs;
+		lowHealthBuffs.push_back(LAST_STAND);
+		lowHealthBuffs.push_back(SHIELD_WALL);
+		m_rotationMap.insert(RotationMap::value_type(ROTATION_EMERGENCY, lowHealthBuffs));
+
+
+		return;
+	}
+	case WARRIOR_SPEC_ARMS:
+		break;
+	case WARRIOR_SPEC_FURY:
+		break;
+	default:
+		break;
+	}
+
+}
 CombatManeuverReturns PlayerbotWarriorAI::DoNextCombatManeuverPVP(Unit* pTarget)
 {
     if (m_ai->CastSpell(HEROIC_STRIKE))
@@ -567,7 +542,11 @@ void PlayerbotWarriorAI::DoNonCombatActions()
 {
     if (!m_ai)  return;
     if (!m_bot) return;
-
+	//if (!m_bot->IsMounted() && m_master->IsMounted())
+	//{
+	//	// mount up if possible.
+	//	m_bot->Mount()
+	//}
     uint32 spec = m_bot->GetSpec();
 
     //Stance Check
@@ -600,8 +579,19 @@ bool PlayerbotWarriorAI::CanPull()
     if (!m_bot) return false;
     if (!m_ai) return false;
 	
-		if (HEROIC_THROW && m_bot->IsSpellReady(HEROIC_THROW))
+	if (HEROIC_THROW && m_bot->IsSpellReady(HEROIC_THROW))
+		return true;
+	else
+		if (m_bot->GetUInt32Value(PLAYER_AMMO_ID)) // Having ammo equipped means a weapon is equipped as well. Probably. [TODO: does this work with throwing knives? Can a playerbot 'cheat' ammo into the slot without a proper weapon?]
+		{
+			// Can't do this, CanPull CANNOT check for anything that requires a target
+			//if (!m_ai->IsInRange(m_ai->GetCurrentTarget(), AUTO_SHOT))
+			//{
+			//    m_ai->TellMaster("I'm out of range.");
+			//    return false;
+			//}
 			return true;
+		}
 
 
     return false;
@@ -630,7 +620,13 @@ bool PlayerbotWarriorAI::Pull()
 			// can pull with just heroic throw
 			return true;
 		}
-			return false;
+		// activate auto shot: Reworked to account for AUTO_SHOT being a triggered spell
+		if (AUTO_SHOT && m_ai->GetCurrentSpellId() != AUTO_SHOT)
+		{
+			m_bot->CastSpell(m_ai->GetCurrentTarget(), AUTO_SHOT, TRIGGERED_OLD_TRIGGERED);
+			return true;
+		}
+		return false;
     }
     else // target is in melee range
     {

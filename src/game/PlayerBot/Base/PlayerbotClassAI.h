@@ -34,6 +34,7 @@
 class Player;
 class PlayerbotAI;
 
+typedef std::map<int, std::vector<uint32>> RotationMap;
 enum JOB_TYPE
 {
     JOB_HEAL     = 0x01,
@@ -44,6 +45,13 @@ enum JOB_TYPE
     JOB_MANAONLY = 0x10  // for buff checking (NOTE: this means any with powertype mana AND druids (who may be shifted but still have mana)
 };
 
+enum ROTATION_TYPE
+{
+	ROTATION_BUFF = 1,
+	ROTATION_DEBUFF = 2,
+	ROTATION_EMERGENCY = 3,
+	ROTATION_NORMAL = 4
+};
 struct heal_priority
 {
     Player* p;
@@ -68,6 +76,8 @@ class PlayerbotClassAI
 
         // all non combat actions go here, ex buffs, heals, rezzes
         virtual void DoNonCombatActions();
+		virtual void SetRotation(uint32 spec) {};
+
         bool EatDrinkBandage(bool bMana = true, unsigned char foodPercent = 50, unsigned char drinkPercent = 50, unsigned char bandagePercent = 70);
 
         // Utilities
@@ -116,6 +126,11 @@ class PlayerbotClassAI
 
         // first aid
         uint32 RECENTLY_BANDAGED;
+
+		// Combat rotation
+		// combat rotation variables
+		int m_combatRotationIndex = 0;
+		RotationMap m_rotationMap;
 };
 
 #endif
