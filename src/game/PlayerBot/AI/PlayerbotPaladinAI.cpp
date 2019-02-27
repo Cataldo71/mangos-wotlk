@@ -538,9 +538,6 @@ bool PlayerbotPaladinAI::BuffHelper(PlayerbotAI* ai, uint32 spellId, Unit* targe
     PlayerbotPaladinAI* c = (PlayerbotPaladinAI*) ai->GetClassAI();
     uint32 bigSpellId = 0;
 
-    Pet* pet = target->GetPet();
-    uint32 petSpellId = 0, petBigSpellId = 0;
-
     // See which buff is appropriate according to class
     // TODO: take into account other paladins in the group
     switch (target->getClass())
@@ -596,19 +593,9 @@ bool PlayerbotPaladinAI::BuffHelper(PlayerbotAI* ai, uint32 spellId, Unit* targe
             }
             break;
         default:
-            // PET
-            /** Hunter pet
-            if (pet && ai->CanReceiveSpecificSpell(SPELL_BLESSING, pet) && !pet->HasAuraType(SPELL_AURA_MOD_UNATTACKABLE))
-            {
-                petSpellId = c->BLESSING_OF_MIGHT;
-                if (!petSpellId)
-                {
-                    petSpellId = c->BLESSING_OF_KINGS;
-                    if (!petSpellId)
-                        petSpellId = c->BLESSING_OF_SANCTUARY;
-                }
-            }*/
-            if (/*pet && ai->CanReceiveSpecificSpell(SPELL_BLESSING, pet) && */!target->HasAuraType(SPELL_AURA_MOD_UNATTACKABLE))
+            // Pets will be sent in via the base class buff mechanics. Do not need to specifically get the pet from any class
+
+            if (!target->HasAuraType(SPELL_AURA_MOD_UNATTACKABLE))
             {
                 if (target->GetPowerType() == POWER_MANA)
                     spellId = c->BLESSING_OF_WISDOM;
@@ -624,15 +611,6 @@ bool PlayerbotPaladinAI::BuffHelper(PlayerbotAI* ai, uint32 spellId, Unit* targe
             }
     }
 
-    /*if (petSpellId == c->BLESSING_OF_MIGHT)
-        petBigSpellId = c->GREATER_BLESSING_OF_MIGHT;
-    else if (petSpellId == c->BLESSING_OF_WISDOM)
-        petBigSpellId = c->GREATER_BLESSING_OF_WISDOM;
-    else if (petSpellId == c->BLESSING_OF_KINGS)
-        petBigSpellId = c->GREATER_BLESSING_OF_KINGS;
-    else if (petSpellId == c->BLESSING_OF_SANCTUARY)
-        petBigSpellId = c->GREATER_BLESSING_OF_SANCTUARY;*/
-
     if (spellId == c->BLESSING_OF_MIGHT)
         bigSpellId = c->GREATER_BLESSING_OF_MIGHT;
     else if (spellId == c->BLESSING_OF_WISDOM)
@@ -642,12 +620,12 @@ bool PlayerbotPaladinAI::BuffHelper(PlayerbotAI* ai, uint32 spellId, Unit* targe
     else if (spellId == c->BLESSING_OF_SANCTUARY)
         bigSpellId = c->GREATER_BLESSING_OF_SANCTUARY;
 
-    if (pet && !pet->HasAuraType(SPELL_AURA_MOD_UNATTACKABLE) && ai->HasSpellReagents(petBigSpellId) && ai->Buff(petBigSpellId, pet))
-        return true;
-    if (ai->HasSpellReagents(bigSpellId) && ai->Buff(bigSpellId, target))
-        return true;
-    if ((pet && !pet->HasAuraType(SPELL_AURA_MOD_UNATTACKABLE) && ai->Buff(petSpellId, pet)) || ai->Buff(spellId, target))
-        return true;
+
+	if (ai->HasSpellReagents(bigSpellId) && ai->Buff(bigSpellId, target))
+		return true;
+	else if (ai->HasSpellReagents(spellId) && ai->Buff(spellId, target))
+		return true;
+
     return false;
 }
 

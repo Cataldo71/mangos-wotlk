@@ -309,15 +309,14 @@ CombatManeuverReturns PlayerbotWarriorAI::DoNextCombatManeuverPVE(Unit* pTarget)
 {
     if (!m_ai)  return RETURN_NO_ACTION_ERROR;
     if (!m_bot) return RETURN_NO_ACTION_ERROR;
+	CombatManeuverReturns rotationResult = RETURN_NO_ACTION_OK;
 
-    //Unit* pVictim = pTarget->getVictim();
-    //float fTargetDist = m_bot->GetCombatDistance(pTarget, true);
     uint32 spec = m_bot->GetSpec();
 
-
-
-    //Used to determine if this bot is highest on threat
-    Unit* newTarget = m_ai->FindAttacker((PlayerbotAI::ATTACKERINFOTYPE)(PlayerbotAI::AIT_VICTIMSELF | PlayerbotAI::AIT_HIGHESTTHREAT), m_bot);
+	// Try to interrupt a caster
+	//
+	if (CombatInterruptCaster(pTarget))
+		return RETURN_CONTINUE;
 
     // do shouts, berserker rage, etc...
     if (BERSERKER_RAGE > 0 && !m_bot->HasAura(BERSERKER_RAGE, EFFECT_INDEX_0))
@@ -330,70 +329,76 @@ CombatManeuverReturns PlayerbotWarriorAI::DoNextCombatManeuverPVE(Unit* pTarget)
     switch (spec)
     {
         case WARRIOR_SPEC_ARMS:
-            // Execute doesn't scale too well with extra rage and uses up *all* rage preventing use of other skills
-            //Haven't found a way to make sudden death work yet, either wrong spell or it needs an effect index(probably)
-            if (EXECUTE > 0 && (pTarget->GetHealthPercent() < 20 || m_bot->HasAura(SUDDEN_DEATH)) && m_ai->GetRageAmount() < 30 && m_ai->CastSpell(EXECUTE, *pTarget))
-                return RETURN_CONTINUE;
-            if (REND > 0 && !pTarget->HasAura(REND, EFFECT_INDEX_0) && m_ai->CastSpell(REND, *pTarget))
-                return RETURN_CONTINUE;
-            if (MORTAL_STRIKE > 0 && m_bot->IsSpellReady(MORTAL_STRIKE) && m_ai->CastSpell(MORTAL_STRIKE, *pTarget))
-                return RETURN_CONTINUE;
-            if (SHATTERING_THROW > 0 && !pTarget->HasAura(SHATTERING_THROW, EFFECT_INDEX_0) && m_bot->IsSpellReady(SHATTERING_THROW) && m_ai->CastSpell(SHATTERING_THROW, *pTarget))
-                return RETURN_CONTINUE;
-            if (BLADESTORM > 0 && m_bot->IsSpellReady(BLADESTORM) /*&& m_ai->GetAttackerCount() >= 3*/ && m_ai->CastSpell(BLADESTORM, *pTarget))
-                return RETURN_CONTINUE;
-            // No way to tell if overpower is active (yet), however taste for blood works
-            if (OVERPOWER > 0 && m_bot->HasAura(TASTE_FOR_BLOOD) && m_ai->CastSpell(OVERPOWER, *pTarget))
-                return RETURN_CONTINUE;
-            if (HEROIC_STRIKE > 0 && m_ai->CastSpell(HEROIC_STRIKE, *pTarget))
-                return RETURN_CONTINUE;
-            if (SLAM > 0 && m_ai->CastSpell(SLAM, *pTarget))
-            {
-                m_ai->SetIgnoreUpdateTime(1);
-                return RETURN_CONTINUE;
-            }
+		{
+			// bypass rotation if proc'ing sudden death or taste for blood
+			//
+			if (EXECUTE > 0 && (pTarget->GetHealthPercent() < 20 || m_bot->HasAura(SUDDEN_DEATH)) && m_ai->GetRageAmount() < 30 && m_ai->CastSpell(EXECUTE, *pTarget))
+				return RETURN_CONTINUE;
 
+			if (OVERPOWER > 0 && m_bot->HasAura(TASTE_FOR_BLOOD) && m_ai->CastSpell(OVERPOWER, *pTarget))
+				return RETURN_CONTINUE;
+
+			rotationResult = NextCombatRotation(pTarget);
+
+			// no action came out of rotation - slam filler
+			//
+			if (rotationResult == RETURN_NO_ACTION_OK)
+				if (SLAM > 0 && m_ai->CastSpell(SLAM, *pTarget))
+				{
+					m_ai->SetIgnoreUpdateTime(1);
+					return RETURN_CONTINUE;
+				}
+		}
         case WARRIOR_SPEC_FURY:
-            if (EXECUTE > 0 && pTarget->GetHealthPercent() < 20 && m_ai->CastSpell(EXECUTE, *pTarget))
-                return RETURN_CONTINUE;
-            if (BLOODTHIRST > 0 && m_bot->IsSpellReady(BLOODTHIRST) && m_ai->CastSpell(BLOODTHIRST, *pTarget))
-                return RETURN_CONTINUE;
-            if (WHIRLWIND > 0 && m_bot->IsSpellReady(WHIRLWIND) && m_ai->CastSpell(WHIRLWIND, *pTarget))
-                return RETURN_CONTINUE;
-            if (SLAM > 0 && m_bot->HasAura(BLOODSURGE, EFFECT_INDEX_0) && m_ai->CastSpell(SLAM, *pTarget))
-                return RETURN_CONTINUE;
-            if (HEROIC_STRIKE > 0 && m_ai->CastSpell(HEROIC_STRIKE, *pTarget))
-                return RETURN_CONTINUE;
+		{
+			// don't spam execute, add it to the rotation
+			//
+			bool executeInRotation = std::find(m_rotationMap[ROTATION_NORMAL].begin(), m_rotationMap[ROTATION_NORMAL].end(), EXECUTE) != m_rotationMap[ROTATION_NORMAL].end();
+			if (EXECUTE > 0 && !executeInRotation && pTarget->GetHealthPercent() < 20 && m_ai->CastSpell(EXECUTE, *pTarget))
+			{
+				m_rotationMap[ROTATION_NORMAL].push_back(EXECUTE);
+				return RETURN_CONTINUE;
+			}
+			
+			// slam on bloodsurge proc
+			if (SLAM > 0 && m_bot->HasAura(BLOODSURGE, EFFECT_INDEX_0) && m_ai->CastSpell(SLAM, *pTarget))
+				return RETURN_CONTINUE;
 
+			// normal rotation
+			rotationResult = NextCombatRotation(pTarget);
+
+			// filler
+			if (rotationResult == RETURN_NO_ACTION_OK)
+				if (HEROIC_STRIKE > 0 && m_ai->CastSpell(HEROIC_STRIKE, *pTarget))
+					return RETURN_CONTINUE;
+		}
         case WARRIOR_SPEC_PROTECTION:
-			return NextCombatMovePVEProtection(pTarget);
+		{
+			//Used to determine if this bot is highest on threat
+			Unit* newTarget = m_ai->FindAttacker((PlayerbotAI::ATTACKERINFOTYPE)(PlayerbotAI::AIT_VICTIMSELF | PlayerbotAI::AIT_HIGHESTTHREAT), m_bot);
 
+			// check if i can taunt
+			//
+			if (m_ai->GetCombatOrder() && PlayerbotAI::ORDERS_TANK && !newTarget && TAUNT > 0 && m_bot->IsSpellReady(TAUNT) && m_ai->CastSpell(TAUNT, *pTarget))
+				return RETURN_CONTINUE;
 
+			rotationResult = NextCombatRotation(pTarget);
+
+			// heroic strike filler
+			//
+			if (rotationResult == RETURN_NO_ACTION_OK)
+				if (HEROIC_STRIKE > 0 && m_ai->CastSpell(HEROIC_STRIKE, *pTarget))
+					return RETURN_CONTINUE;
+		}
     }
 
-    return RETURN_NO_ACTION_OK;
-}
-CombatManeuverReturns PlayerbotWarriorAI::NextCombatMovePVEArms(Unit* pTarget)
-{
-	return RETURN_NO_ACTION_OK;
+    return rotationResult;
 }
 
-CombatManeuverReturns PlayerbotWarriorAI::NextCombatMovePVEFury(Unit* pTarget)
+bool PlayerbotWarriorAI::CombatInterruptCaster(Unit* pTarget)
 {
-	return RETURN_NO_ACTION_OK;
-}
-
-/*
-* Parameters: pTarget - the target of the combat move
-* Description: AI for protection warrior combat move
-*/
-CombatManeuverReturns PlayerbotWarriorAI::NextCombatMovePVEProtection(Unit* pTarget) 
-{
-
-	//Used to determine if this bot is highest on threat
-	Unit* newTarget = m_ai->FindAttacker((PlayerbotAI::ATTACKERINFOTYPE)(PlayerbotAI::AIT_VICTIMSELF | PlayerbotAI::AIT_HIGHESTTHREAT), m_bot);
 	// interrupt casters
-	//
+//
 	Spell *pSpell = pTarget->GetCurrentSpell(CURRENT_GENERIC_SPELL);
 	if (!pSpell)
 		pSpell = pTarget->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
@@ -403,6 +408,16 @@ CombatManeuverReturns PlayerbotWarriorAI::NextCombatMovePVEProtection(Unit* pTar
 		if (SPELL_REFLECTION > 0 && !m_bot->HasAura(SPELL_REFLECTION, EFFECT_INDEX_0) && m_ai->CastSpell(SPELL_REFLECTION, *m_bot))
 			return RETURN_CONTINUE;
 	}
+}
+/*
+* Parameters: pTarget - the target of the combat move
+* Description: AI for protection warrior combat move
+*/
+CombatManeuverReturns PlayerbotWarriorAI::NextCombatRotation(Unit* pTarget) 
+{
+	if (CombatInterruptCaster(pTarget))
+		return RETURN_CONTINUE;
+
 	// emergency? % check should be configurable
 	if (m_bot->GetHealthPercent() < 20 && m_rotationMap[ROTATION_EMERGENCY].size()) {
 		for (std::vector<uint32>::iterator eit = m_rotationMap[ROTATION_EMERGENCY].begin(); eit != m_rotationMap[ROTATION_EMERGENCY].end(); ++eit)
@@ -416,11 +431,6 @@ CombatManeuverReturns PlayerbotWarriorAI::NextCombatMovePVEProtection(Unit* pTar
 		}
 	}
 
-	// check if i can taunt
-	//
-	if (m_ai->GetCombatOrder() && PlayerbotAI::ORDERS_TANK && !newTarget && TAUNT > 0 && m_bot->IsSpellReady(TAUNT) && m_ai->CastSpell(TAUNT, *pTarget))
-		return RETURN_CONTINUE;
-
 	// Check my debuffs on the target
 	//
 	for (std::vector<uint32>::iterator dbiter = m_rotationMap[ROTATION_DEBUFF].begin(); dbiter != m_rotationMap[ROTATION_DEBUFF].end(); dbiter++)
@@ -433,6 +443,7 @@ CombatManeuverReturns PlayerbotWarriorAI::NextCombatMovePVEProtection(Unit* pTar
 			return RETURN_CONTINUE;
 		}
 	}
+
 	// check my self combat buffs
 	//
 	for (std::vector<uint32>::iterator iter = m_rotationMap[ROTATION_BUFF].begin(); iter != m_rotationMap[ROTATION_BUFF].end(); iter++)
@@ -455,7 +466,7 @@ CombatManeuverReturns PlayerbotWarriorAI::NextCombatMovePVEProtection(Unit* pTar
 		return RETURN_CONTINUE;
 	}
 	else {
-		// if we couldnt do our next rotation, leave the rotation index alone and try a heroic strike
+		// if we couldn't do our next rotation, leave the rotation index alone and try a heroic strike
 		//
 		if (HEROIC_STRIKE > 0 && m_ai->CastSpell(HEROIC_STRIKE, *pTarget))
 			return RETURN_CONTINUE;
@@ -463,52 +474,79 @@ CombatManeuverReturns PlayerbotWarriorAI::NextCombatMovePVEProtection(Unit* pTar
 	return RETURN_NO_ACTION_OK;
 }
 
-// set the rotations for 
+// set the rotations  
 void PlayerbotWarriorAI::SetRotation(uint32 spec)
 {
+	std::vector<uint32> rotation;
+	std::vector<uint32> debuffs;
+	std::vector<uint32> buffs;
+	std::vector<uint32> lowHealthBuffs;
+
 	switch (spec)
 	{
-	case WARRIOR_SPEC_PROTECTION:
-	{
-		//If we have devastate it will replace SA in our rotation
-		uint32 SUNDER = (DEVASTATE > 0 ? DEVASTATE : SUNDER_ARMOR);
+		case WARRIOR_SPEC_PROTECTION:
+		{
+			// TODO: for protection, might want to look at multi target rotation if tanking
+			//
 
-		// standard rotation for prot warrior
-		std::vector<uint32> protectionRotation;
-		protectionRotation.push_back(SHIELD_BASH);
-		protectionRotation.push_back(SUNDER);
-		protectionRotation.push_back(HEROIC_STRIKE);
-		m_rotationMap.insert(RotationMap::value_type(ROTATION_NORMAL, protectionRotation));
+			//If we have devastate it will replace SA in our rotation
+			uint32 SUNDER = (DEVASTATE > 0 ? DEVASTATE : SUNDER_ARMOR);
 
-		// debuffs to keep on the target
-		std::vector<uint32> debuffs;
-		debuffs.push_back(THUNDER_CLAP);
-		debuffs.push_back(DEMORALIZING_SHOUT);
-		m_rotationMap.insert(RotationMap::value_type(ROTATION_DEBUFF, debuffs));
+			// standard rotation for prot warrior
+			rotation.push_back(SHIELD_BASH);
+			rotation.push_back(SUNDER);
+			rotation.push_back(HEROIC_STRIKE);
+			m_rotationMap.insert(RotationMap::value_type(ROTATION_NORMAL, rotation));
 
-		// buffs to have up all the time.
-		std::vector<uint32> buffs;
-		buffs.push_back(BLOODRAGE);
-		buffs.push_back(BATTLE_SHOUT);
-		// shield block seems to be broken - says its ready when its not.
-		//buffs.push_back(SHIELD_BLOCK);
-		m_rotationMap.insert(RotationMap::value_type(ROTATION_BUFF, buffs));
+			// debuffs to keep on the target
+			debuffs.push_back(THUNDER_CLAP);
+			debuffs.push_back(DEMORALIZING_SHOUT);
+			m_rotationMap.insert(RotationMap::value_type(ROTATION_DEBUFF, debuffs));
 
-		// emergency skills 
-		std::vector<uint32> lowHealthBuffs;
-		lowHealthBuffs.push_back(LAST_STAND);
-		lowHealthBuffs.push_back(SHIELD_WALL);
-		m_rotationMap.insert(RotationMap::value_type(ROTATION_EMERGENCY, lowHealthBuffs));
+			// buffs to have up all the time.
+			buffs.push_back(BLOODRAGE);
+			buffs.push_back(BATTLE_SHOUT);
+			// shield block seems to be broken - says its ready when its not.
+			//buffs.push_back(SHIELD_BLOCK);
+			m_rotationMap.insert(RotationMap::value_type(ROTATION_BUFF, buffs));
+
+			// emergency skills 
+			lowHealthBuffs.push_back(LAST_STAND);
+			lowHealthBuffs.push_back(SHIELD_WALL);
+			m_rotationMap.insert(RotationMap::value_type(ROTATION_EMERGENCY, lowHealthBuffs));
 
 
-		return;
-	}
-	case WARRIOR_SPEC_ARMS:
-		break;
-	case WARRIOR_SPEC_FURY:
-		break;
-	default:
-		break;
+			return;
+		}
+		case WARRIOR_SPEC_ARMS:
+			// debuffs to keep on the target
+			debuffs.push_back(REND);
+			m_rotationMap.insert(RotationMap::value_type(ROTATION_DEBUFF, debuffs));
+
+			// buffs to have up all the time.
+			buffs.push_back(BLOODRAGE);
+			buffs.push_back(BATTLE_SHOUT);
+
+			m_rotationMap.insert(RotationMap::value_type(ROTATION_BUFF, buffs));
+
+			// standard rotation for Arms warrior
+			rotation.push_back(MORTAL_STRIKE);
+			rotation.push_back(OVERPOWER);
+			rotation.push_back(EXECUTE);
+			rotation.push_back(BLADESTORM);
+			m_rotationMap.insert(RotationMap::value_type(ROTATION_NORMAL, rotation));
+			return;
+
+		case WARRIOR_SPEC_FURY:
+
+			// fury warrior pretty simple. out of rotation heroic strikes filled in above
+			//
+			rotation.push_back(BLOODTHIRST);
+			rotation.push_back(WHIRLWIND);
+			rotation.push_back(HEROIC_STRIKE);
+			break;
+		default:
+			break;
 	}
 
 }

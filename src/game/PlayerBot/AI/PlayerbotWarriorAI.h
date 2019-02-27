@@ -121,9 +121,8 @@ class PlayerbotWarriorAI : PlayerbotClassAI
         CombatManeuverReturns DoNextCombatManeuverPVP(Unit* pTarget);
 
 		// spec specific combat manuevers to keep the code clean
-		CombatManeuverReturns NextCombatMovePVEProtection(Unit* pTarget);
-		CombatManeuverReturns NextCombatMovePVEArms(Unit* pTarget);
-		CombatManeuverReturns NextCombatMovePVEFury(Unit* pTarget);
+		CombatManeuverReturns NextCombatRotation(Unit* pTarget);
+		bool CombatInterruptCaster(Unit* pTarget);
 
         // ARMS
         uint32 BATTLE_STANCE,
