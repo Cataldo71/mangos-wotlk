@@ -332,6 +332,33 @@ CombatManeuverReturns PlayerbotPriestAI::DoNextCombatManeuverPVE(Unit* pTarget)
 
     return RETURN_NO_ACTION_OK;
 } // end DoNextCombatManeuver
+void PlayerbotPriestAI::SetRotation(uint32 spec)
+{
+	std::vector<uint32> rotation;
+	std::vector<uint32> debuffs;
+	std::vector<uint32> buffs;
+	std::vector<uint32> lowHealthBuffs;
+
+	switch (spec)
+	{
+	case PRIEST_SPEC_HOLY:
+	{
+		return;
+	}
+	case PRIEST_SPEC_SHADOW:
+		return;
+
+	case PRIEST_SPEC_DISCIPLINE:
+
+		break;
+	default:
+		break;
+	}
+	m_rotationMap[ROTATION_NORMAL] = rotation;
+	m_rotationMap[ROTATION_BUFF] = buffs;
+	m_rotationMap[ROTATION_DEBUFF] = debuffs;
+	m_rotationMap[ROTATION_EMERGENCY] = lowHealthBuffs;
+}
 
 CombatManeuverReturns PlayerbotPriestAI::DoNextCombatManeuverPVP(Unit* pTarget)
 {

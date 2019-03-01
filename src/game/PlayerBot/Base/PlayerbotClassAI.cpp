@@ -35,6 +35,13 @@ PlayerbotClassAI::PlayerbotClassAI(Player* const master, Player* const bot, Play
     m_MinHealthPercentDPS    = 30;
     m_MinHealthPercentMaster = m_MinHealthPercentDPS;
 
+	// initialize the rotation map.
+	//
+	m_rotationMap.insert(RotationMap::value_type(ROTATION_BUFF, std::vector <uint32>()));
+	m_rotationMap.insert(RotationMap::value_type(ROTATION_DEBUFF, std::vector <uint32>()));
+	m_rotationMap.insert(RotationMap::value_type(ROTATION_EMERGENCY, std::vector <uint32>()));
+	m_rotationMap.insert(RotationMap::value_type(ROTATION_NORMAL, std::vector <uint32>()));
+
     ClearWait();
 }
 PlayerbotClassAI::~PlayerbotClassAI() {}
@@ -51,7 +58,82 @@ void PlayerbotClassAI::DoNonCombatActions()
 {
     DEBUG_LOG("[PlayerbotAI]: Warning: Using PlayerbotClassAI::DoNonCombatActions() rather than class specific function");
 }
+/*
+* Parameters: pTarget - the target of the combat move
+* Description: AI for protection warrior combat move
+*/
+//TODO: move this up to classAI
+CombatManeuverReturns PlayerbotClassAI::NextCombatRotation(Unit* pTarget)
+{
+	// TODO: can we tell if the target is elite/boss or not and apply different rotations, execute phase rotations, etc...??
+	// next project is to create a set of rotations for different creature types (normal/elite/boss) and a rotation for
+	// execute phase of a boss. Just gotta figure out how to find out if a mob is a boss or not. can tell worldboss/elite easily like this:
+	bool boss = false, elite = false;
+	uint32 rank = 0;
+	if (pTarget->IsCreature()) {
+		Creature* pCreature = dynamic_cast<Creature*>(pTarget);
+		rank = pCreature->GetCreatureInfo()->Rank;
+		if (rank == CREATURE_ELITE_WORLDBOSS)
+			boss = true;
+		else if (pCreature->GetCreatureType() == CREATURE_ELITE_ELITE)
+			boss = true; //??
+	}
 
+	// emergency? % check should be configurable or possibly rotation map should include some metadata to 
+	// specify conditions around the rotation entry (ex: create a struct as the type for the vector that has conditionals for min/max health,
+	// min/max mana, etc... in addition to the spell to be cast)
+	//
+	if (m_bot->GetHealthPercent() < 20 && m_rotationMap[ROTATION_EMERGENCY].size()) {
+		for (std::vector<uint32>::iterator eit = m_rotationMap[ROTATION_EMERGENCY].begin(); eit != m_rotationMap[ROTATION_EMERGENCY].end(); ++eit)
+		{
+			if (*eit > 0 && !m_bot->HasAura(*eit) && m_bot->IsSpellReady(*eit) && m_ai->CastSpell(*eit, *m_bot))
+			{
+				std::string spellName(GetSpellStore()->LookupEntry<SpellEntry>(*eit)->SpellName[0]);
+				m_ai->TellMaster("EMERGENCY CAST: " + spellName);
+				return RETURN_CONTINUE;
+			}
+		}
+	}
+
+	// Check my debuffs on the target
+	//
+	for (std::vector<uint32>::iterator dbiter = m_rotationMap[ROTATION_DEBUFF].begin(); dbiter != m_rotationMap[ROTATION_DEBUFF].end(); dbiter++)
+	{
+		if (*dbiter > 0 && !pTarget->HasAura(*dbiter) && m_bot->IsSpellReady(*dbiter) && m_ai->CastSpell(*dbiter, *pTarget)) {
+			std::string spellName(GetSpellStore()->LookupEntry<SpellEntry>(*dbiter)->SpellName[0]);
+
+			m_ai->SendWhisper("Casting Debuff index " + spellName, *m_master);
+
+			return RETURN_CONTINUE;
+		}
+	}
+
+	// check my self combat buffs
+	//
+	for (std::vector<uint32>::iterator iter = m_rotationMap[ROTATION_BUFF].begin(); iter != m_rotationMap[ROTATION_BUFF].end(); iter++)
+	{
+		if (*iter > 0 && !m_bot->HasAura(*iter) && m_bot->IsSpellReady(*iter) && m_ai->CastSpell(*iter, *m_bot)) {
+			std::string spellName(GetSpellStore()->LookupEntry<SpellEntry>(*iter)->SpellName[0]);
+			m_ai->TellMaster("Casting Buff " + spellName);
+			return RETURN_CONTINUE;
+		}
+	}
+
+	// buffs and debuffs handled - do next in our rotation.
+	//
+	// sanity check
+	if(m_rotationMap[ROTATION_NORMAL].size() > 0)
+	if (m_rotationMap[ROTATION_NORMAL][m_combatRotationIndex] > 0 && m_bot->IsSpellReady(m_rotationMap[ROTATION_NORMAL][m_combatRotationIndex]) && m_ai->CastSpell(m_rotationMap[ROTATION_NORMAL][m_combatRotationIndex]))
+	{
+		std::string spellName(GetSpellStore()->LookupEntry<SpellEntry>(m_rotationMap[ROTATION_NORMAL][m_combatRotationIndex])->SpellName[0]);
+		m_ai->TellMaster("Casting Rotation -  " + spellName);
+		if (++m_combatRotationIndex == m_rotationMap[ROTATION_NORMAL].size())
+			m_combatRotationIndex = 0;
+		return RETURN_CONTINUE;
+	}
+
+	return RETURN_NO_ACTION_OK;
+}
 bool PlayerbotClassAI::EatDrinkBandage(bool bMana, unsigned char foodPercent, unsigned char drinkPercent, unsigned char bandagePercent)
 {
     Item* drinkItem = nullptr;

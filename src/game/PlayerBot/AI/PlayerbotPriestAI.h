@@ -100,7 +100,7 @@ class PlayerbotPriestAI : PlayerbotClassAI
         // all combat actions go here
         CombatManeuverReturns DoFirstCombatManeuver(Unit* pTarget);
         CombatManeuverReturns DoNextCombatManeuver(Unit* pTarget);
-
+		void SetRotation(uint32 spec);
         // all non combat actions go here, ex buffs, heals, rezzes
         void DoNonCombatActions();
 

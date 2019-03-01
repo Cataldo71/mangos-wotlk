@@ -96,7 +96,8 @@ class PlayerbotClassAI
         virtual CombatManeuverReturns DoNextCombatManeuverPVE(Unit*);
         virtual CombatManeuverReturns DoFirstCombatManeuverPVP(Unit*);
         virtual CombatManeuverReturns DoNextCombatManeuverPVP(Unit*);
-
+		// spec specific combat manuevers to keep the code clean
+		CombatManeuverReturns NextCombatRotation(Unit* pTarget);
         CombatManeuverReturns CastSpellNoRanged(uint32 nextAction, Unit* pTarget);
         CombatManeuverReturns CastSpellWand(uint32 nextAction, Unit* pTarget, uint32 SHOOT);
         virtual CombatManeuverReturns HealPlayer(Player* target);

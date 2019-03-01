@@ -99,6 +99,9 @@ PlayerbotWarlockAI::~PlayerbotWarlockAI() {}
 
 CombatManeuverReturns PlayerbotWarlockAI::DoFirstCombatManeuver(Unit* pTarget)
 {
+	// reset the rotation index
+	m_combatRotationIndex = 0;
+	SetRotation(m_bot->GetSpec());
     // There are NPCs in BGs and Open World PvP, so don't filter this on PvP scenarios (of course if PvP targets anyone but tank, all bets are off anyway)
     // Wait until the tank says so, until any non-tank gains aggro or X seconds - whichever is shortest
     if (m_ai->GetCombatOrder() & PlayerbotAI::ORDERS_TEMP_WAIT_TANKAGGRO)
@@ -236,114 +239,56 @@ CombatManeuverReturns PlayerbotWarlockAI::DoNextCombatManeuverPVE(Unit* pTarget)
         return RETURN_CONTINUE;
     }
 
-
-    // Damage Spells
-    switch (spec)
-    {
-        case WARLOCK_SPEC_AFFLICTION:
-            if (CURSE_OF_AGONY && !m_ai->IsImmuneToSchool(pTarget, SPELL_SCHOOL_MASK_SHADOW) && m_ai->In_Reach(pTarget, CURSE_OF_AGONY) && !pTarget->HasAura(CURSE_OF_AGONY) && CastSpell(CURSE_OF_AGONY, pTarget))
-                return RETURN_CONTINUE;
-            if (CORRUPTION && !m_ai->IsImmuneToSchool(pTarget, SPELL_SCHOOL_MASK_SHADOW) && m_ai->In_Reach(pTarget, CORRUPTION) && !pTarget->HasAura(CORRUPTION) && CastSpell(CORRUPTION, pTarget))
-                return RETURN_CONTINUE;
-            if (FIRE && !m_ai->IsImmuneToSchool(pTarget, SPELL_SCHOOL_MASK_FIRE) && m_ai->In_Reach(pTarget, FIRE) && !pTarget->HasAura(FIRE) && CastSpell(FIRE, pTarget))
-                return RETURN_CONTINUE;
-            if (HAUNT && !m_ai->IsImmuneToSchool(pTarget, SPELL_SCHOOL_MASK_SHADOW) && m_ai->In_Reach(pTarget, HAUNT) && m_bot->IsSpellReady(HAUNT) && CastSpell(HAUNT, pTarget))
-                return RETURN_CONTINUE;
-            if (SHADOW_BOLT && !m_ai->IsImmuneToSchool(pTarget, SPELL_SCHOOL_MASK_SHADOW) && m_ai->In_Reach(pTarget, SHADOW_BOLT) && CastSpell(SHADOW_BOLT, pTarget))
-                return RETURN_CONTINUE;
-
-            return RETURN_NO_ACTION_OK;
-
-        case WARLOCK_SPEC_DEMONOLOGY:
-            if (pet && DEMONIC_EMPOWERMENT && m_bot->IsSpellReady(DEMONIC_EMPOWERMENT) && CastSpell(DEMONIC_EMPOWERMENT))
-                return RETURN_CONTINUE;
-            if (CURSE_OF_AGONY && !m_ai->IsImmuneToSchool(pTarget, SPELL_SCHOOL_MASK_SHADOW) && m_ai->In_Reach(pTarget, CURSE_OF_AGONY) && !pTarget->HasAura(CURSE_OF_AGONY) && CastSpell(CURSE_OF_AGONY, pTarget))
-                return RETURN_CONTINUE;
-            if (CORRUPTION && !m_ai->IsImmuneToSchool(pTarget, SPELL_SCHOOL_MASK_SHADOW) && m_ai->In_Reach(pTarget, CORRUPTION) && !pTarget->HasAura(CORRUPTION) && CastSpell(CORRUPTION, pTarget))
-                return RETURN_CONTINUE;
-            if (FIRE && !m_ai->IsImmuneToSchool(pTarget, SPELL_SCHOOL_MASK_FIRE) && m_ai->In_Reach(pTarget, FIRE) && !pTarget->HasAura(FIRE) && CastSpell(FIRE, pTarget))
-                return RETURN_CONTINUE;
-            if (INCINERATE && !m_ai->IsImmuneToSchool(pTarget, SPELL_SCHOOL_MASK_FIRE) && m_ai->In_Reach(pTarget, INCINERATE) && pTarget->HasAura(FIRE) && CastSpell(INCINERATE, pTarget))
-                return RETURN_CONTINUE;
-            if (SHADOW_BOLT && !m_ai->IsImmuneToSchool(pTarget, SPELL_SCHOOL_MASK_SHADOW) && m_ai->In_Reach(pTarget, SHADOW_BOLT) && CastSpell(SHADOW_BOLT, pTarget))
-                return RETURN_CONTINUE;
-
-            return RETURN_NO_ACTION_OK;
-
-        case WARLOCK_SPEC_DESTRUCTION:
-            if (CURSE_OF_AGONY && !m_ai->IsImmuneToSchool(pTarget, SPELL_SCHOOL_MASK_SHADOW) && m_ai->In_Reach(pTarget, CURSE_OF_AGONY) && !pTarget->HasAura(CURSE_OF_AGONY) && CastSpell(CURSE_OF_AGONY, pTarget))
-                return RETURN_CONTINUE;
-            if (CORRUPTION && !m_ai->IsImmuneToSchool(pTarget, SPELL_SCHOOL_MASK_SHADOW) && m_ai->In_Reach(pTarget, CORRUPTION) && !pTarget->HasAura(CORRUPTION) && CastSpell(CORRUPTION, pTarget))
-                return RETURN_CONTINUE;
-            if (FIRE && !m_ai->IsImmuneToSchool(pTarget, SPELL_SCHOOL_MASK_FIRE) && m_ai->In_Reach(pTarget, FIRE) && !pTarget->HasAura(FIRE) && CastSpell(FIRE, pTarget))
-                return RETURN_CONTINUE;
-            if (CONFLAGRATE && !m_ai->IsImmuneToSchool(pTarget, SPELL_SCHOOL_MASK_FIRE) && m_ai->In_Reach(pTarget, CONFLAGRATE) && pTarget->HasAura(FIRE) && m_bot->IsSpellReady(CONFLAGRATE) && CastSpell(CONFLAGRATE, pTarget))
-                return RETURN_CONTINUE;
-            if (CHAOS_BOLT && m_ai->In_Reach(pTarget, CHAOS_BOLT) && m_bot->IsSpellReady(CHAOS_BOLT) && CastSpell(CHAOS_BOLT, pTarget))
-                return RETURN_CONTINUE;
-            if (INCINERATE && !m_ai->IsImmuneToSchool(pTarget, SPELL_SCHOOL_MASK_FIRE) && m_ai->In_Reach(pTarget, INCINERATE) && pTarget->HasAura(FIRE) && CastSpell(INCINERATE, pTarget))
-                return RETURN_CONTINUE;
-            if (SHADOW_BOLT && !m_ai->IsImmuneToSchool(pTarget, SPELL_SCHOOL_MASK_SHADOW) && m_ai->In_Reach(pTarget, SHADOW_BOLT) && CastSpell(SHADOW_BOLT, pTarget))
-                return RETURN_CONTINUE;
-
-            return RETURN_NO_ACTION_OK;
-
-            //if (LIFE_TAP && LastSpellAffliction < 1 && m_ai->GetManaPercent() <= 50 && m_ai->GetHealthPercent() > 50)
-            //    m_ai->CastSpell(LIFE_TAP, *m_bot);
-            //else if (DRAIN_SOUL && pTarget->GetHealth() < pTarget->GetMaxHealth() * 0.40 && !pTarget->HasAura(DRAIN_SOUL) && LastSpellAffliction < 3)
-            //    m_ai->CastSpell(DRAIN_SOUL, *pTarget);
-            //    //m_ai->SetIgnoreUpdateTime(15);
-            //else if (DRAIN_LIFE && LastSpellAffliction < 4 && !pTarget->HasAura(DRAIN_SOUL) && !pTarget->HasAura(SEED_OF_CORRUPTION) && !pTarget->HasAura(DRAIN_LIFE) && !pTarget->HasAura(DRAIN_MANA) && m_ai->GetHealthPercent() <= 70)
-            //    m_ai->CastSpell(DRAIN_LIFE, *pTarget);
-            //    //m_ai->SetIgnoreUpdateTime(5);
-            //else if (SEED_OF_CORRUPTION && !pTarget->HasAura(SEED_OF_CORRUPTION) && LastSpellAffliction < 7)
-            //    m_ai->CastSpell(SEED_OF_CORRUPTION, *pTarget);
-            //else if (HOWL_OF_TERROR && !pTarget->HasAura(HOWL_OF_TERROR) && m_ai->GetAttackerCount() > 3 && LastSpellAffliction < 8)
-            //    m_ai->CastSpell(HOWL_OF_TERROR, *pTarget);
-            //    m_ai->TellMaster("casting howl of terror!");
-            //else if (FEAR && !pTarget->HasAura(FEAR) && pVictim == m_bot && m_ai->GetAttackerCount() >= 2 && LastSpellAffliction < 9)
-            //    m_ai->CastSpell(FEAR, *pTarget);
-            //    //m_ai->TellMaster("casting fear!");
-            //    //m_ai->SetIgnoreUpdateTime(1.5);
-            //else if ((pet) && (DARK_PACT > 0 && m_ai->GetManaPercent() <= 50 && LastSpellAffliction < 10 && pet->GetPower(POWER_MANA) > 0))
-            //    m_ai->CastSpell(DARK_PACT, *m_bot);
-            //if (SHADOWFURY && LastSpellDestruction < 1 && !pTarget->HasAura(SHADOWFURY))
-            //    m_ai->CastSpell(SHADOWFURY, *pTarget);
-            //else if (RAIN_OF_FIRE && LastSpellDestruction < 3 && m_ai->GetAttackerCount() >= 3)
-            //    m_ai->CastSpell(RAIN_OF_FIRE, *pTarget);
-            //    //m_ai->TellMaster("casting rain of fire!");
-            //    //m_ai->SetIgnoreUpdateTime(8);
-            //else if (SHADOWFLAME && !pTarget->HasAura(SHADOWFLAME) && LastSpellDestruction < 4)
-            //    m_ai->CastSpell(SHADOWFLAME, *pTarget);
-            //else if (SEARING_PAIN && LastSpellDestruction < 8)
-            //    m_ai->CastSpell(SEARING_PAIN, *pTarget);
-            //else if (SOUL_FIRE && LastSpellDestruction < 9)
-            //    m_ai->CastSpell(SOUL_FIRE, *pTarget);
-            //    //m_ai->SetIgnoreUpdateTime(6);
-            //else if (SHADOWBURN && LastSpellDestruction < 11 && pTarget->GetHealth() < pTarget->GetMaxHealth() * 0.20 && !pTarget->HasAura(SHADOWBURN))
-            //    m_ai->CastSpell(SHADOWBURN, *pTarget);
-            //else if (HELLFIRE && LastSpellDestruction < 12 && !m_bot->HasAura(HELLFIRE) && m_ai->GetAttackerCount() >= 5 && m_ai->GetHealthPercent() >= 50)
-            //    m_ai->CastSpell(HELLFIRE);
-            //    m_ai->TellMaster("casting hellfire!");
-            //    //m_ai->SetIgnoreUpdateTime(15);
-            //else if (CURSE_OF_THE_ELEMENTS && !pTarget->HasAura(CURSE_OF_THE_ELEMENTS) && !pTarget->HasAura(SHADOWFLAME) && !pTarget->HasAura(CURSE_OF_AGONY) && !pTarget->HasAura(CURSE_OF_WEAKNESS) && LastSpellCurse < 2)
-            //    m_ai->CastSpell(CURSE_OF_THE_ELEMENTS, *pTarget);
-            //else if (CURSE_OF_WEAKNESS && !pTarget->HasAura(CURSE_OF_WEAKNESS) && !pTarget->HasAura(SHADOWFLAME) && !pTarget->HasAura(CURSE_OF_AGONY) && !pTarget->HasAura(CURSE_OF_THE_ELEMENTS) && LastSpellCurse < 3)
-            //    m_ai->CastSpell(CURSE_OF_WEAKNESS, *pTarget);
-            //else if (CURSE_OF_TONGUES && !pTarget->HasAura(CURSE_OF_TONGUES) && !pTarget->HasAura(SHADOWFLAME) && !pTarget->HasAura(CURSE_OF_WEAKNESS) && !pTarget->HasAura(CURSE_OF_AGONY) && !pTarget->HasAura(CURSE_OF_THE_ELEMENTS) && LastSpellCurse < 4)
-            //    m_ai->CastSpell(CURSE_OF_TONGUES, *pTarget);
-    }
-
-    // No spec due to low level OR no spell found yet
-    if (CORRUPTION && m_ai->In_Reach(pTarget, CORRUPTION) && !pTarget->HasAura(CORRUPTION) && CastSpell(CORRUPTION, pTarget))
-        return RETURN_CONTINUE;
-    if (FIRE && !m_ai->IsImmuneToSchool(pTarget, SPELL_SCHOOL_MASK_FIRE) && m_ai->In_Reach(pTarget, FIRE) && !pTarget->HasAura(FIRE) && CastSpell(FIRE, pTarget))
-        return RETURN_CONTINUE;
-    if (SHADOW_BOLT && !m_ai->IsImmuneToSchool(pTarget, SPELL_SCHOOL_MASK_SHADOW) && m_ai->In_Reach(pTarget, SHADOW_BOLT))
-        return CastSpell(SHADOW_BOLT, pTarget);
-
-    return RETURN_NO_ACTION_OK;
+    return NextCombatRotation(pTarget);
 } // end DoNextCombatManeuver
+
+void PlayerbotWarlockAI::SetRotation(uint32 spec)
+{
+	std::vector<uint32> rotation;
+	std::vector<uint32> debuffs;
+	std::vector<uint32> buffs;
+	std::vector<uint32> lowHealthBuffs;
+
+	//If we have UA it will replace immolate in our rotation
+	uint32 FIRE = (UNSTABLE_AFFLICTION > 0 ? UNSTABLE_AFFLICTION : IMMOLATE);
+
+	switch (spec)
+	{
+	case WARLOCK_SPEC_AFFLICTION:
+		// simple - keep dots up and spam SB
+		debuffs.push_back(CORRUPTION);
+		debuffs.push_back(FIRE);
+		debuffs.push_back(CURSE_OF_AGONY);
+		debuffs.push_back(HAUNT);
+
+		rotation.push_back(SHADOW_BOLT);
+
+		break;
+	case WARLOCK_SPEC_DEMONOLOGY:
+		debuffs.push_back(CURSE_OF_THE_ELEMENTS);
+		debuffs.push_back(CORRUPTION);
+		debuffs.push_back(IMMOLATE);
+
+		// would be nice to be able to put conditionals in here. molton core proc means we should be 
+		// casting incinerate. Execute phase we should be casting soul fire.
+		rotation.push_back(SHADOW_BOLT);
+		rotation.push_back(INCINERATE);
+
+		break;
+	case WARLOCK_SPEC_DESTRUCTION:
+		break;
+	default:
+		debuffs.push_back(CORRUPTION);
+		debuffs.push_back(FIRE);
+		debuffs.push_back(CURSE_OF_AGONY);
+		rotation.push_back(SHADOW_BOLT);
+
+	}
+	m_rotationMap[ROTATION_NORMAL] = rotation;
+	m_rotationMap[ROTATION_BUFF] = buffs;
+	m_rotationMap[ROTATION_DEBUFF] = debuffs;
+	m_rotationMap[ROTATION_EMERGENCY] = lowHealthBuffs;
+}
 
 CombatManeuverReturns PlayerbotWarlockAI::DoNextCombatManeuverPVP(Unit* pTarget)
 {

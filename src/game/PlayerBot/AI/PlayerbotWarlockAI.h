@@ -163,7 +163,7 @@ class PlayerbotWarlockAI : PlayerbotClassAI
         // all combat actions go here
         CombatManeuverReturns DoFirstCombatManeuver(Unit* pTarget);
         CombatManeuverReturns DoNextCombatManeuver(Unit* pTarget);
-
+		void SetRotation(uint32 spec) override;
         // all non combat actions go here, ex buffs, heals, rezzes
         void DoNonCombatActions();
 

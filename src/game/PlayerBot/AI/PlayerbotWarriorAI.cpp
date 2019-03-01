@@ -404,75 +404,13 @@ bool PlayerbotWarriorAI::CombatInterruptCaster(Unit* pTarget)
 		pSpell = pTarget->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
 	if (pSpell) {
 		if (PUMMEL > 0 && m_ai->CastSpell(PUMMEL, *pTarget))
-			return RETURN_CONTINUE;
+			return true;
 		if (SPELL_REFLECTION > 0 && !m_bot->HasAura(SPELL_REFLECTION, EFFECT_INDEX_0) && m_ai->CastSpell(SPELL_REFLECTION, *m_bot))
-			return RETURN_CONTINUE;
+			return true;
 	}
+	return false;
 }
-/*
-* Parameters: pTarget - the target of the combat move
-* Description: AI for protection warrior combat move
-*/
-CombatManeuverReturns PlayerbotWarriorAI::NextCombatRotation(Unit* pTarget) 
-{
-	if (CombatInterruptCaster(pTarget))
-		return RETURN_CONTINUE;
 
-	// emergency? % check should be configurable
-	if (m_bot->GetHealthPercent() < 20 && m_rotationMap[ROTATION_EMERGENCY].size()) {
-		for (std::vector<uint32>::iterator eit = m_rotationMap[ROTATION_EMERGENCY].begin(); eit != m_rotationMap[ROTATION_EMERGENCY].end(); ++eit)
-		{
-			if (*eit > 0 && !m_bot->HasAura(*eit) && m_bot->IsSpellReady(*eit) && m_ai->CastSpell(*eit, *m_bot))
-			{
-				std::string spellName(GetSpellStore()->LookupEntry<SpellEntry>(*eit)->SpellName[0]);
-				m_ai->TellMaster("EMERGENCY CAST: " + spellName);
-				return RETURN_CONTINUE;
-			}
-		}
-	}
-
-	// Check my debuffs on the target
-	//
-	for (std::vector<uint32>::iterator dbiter = m_rotationMap[ROTATION_DEBUFF].begin(); dbiter != m_rotationMap[ROTATION_DEBUFF].end(); dbiter++)
-	{
-		if (*dbiter > 0 && !pTarget->HasAura(*dbiter) && m_bot->IsSpellReady(*dbiter) && m_ai->CastSpell(*dbiter, *pTarget)) {
-			std::string spellName(GetSpellStore()->LookupEntry<SpellEntry>(*dbiter)->SpellName[0]);
-
-			m_ai->SendWhisper("Casting Debuff index " + spellName, *m_master);
-
-			return RETURN_CONTINUE;
-		}
-	}
-
-	// check my self combat buffs
-	//
-	for (std::vector<uint32>::iterator iter = m_rotationMap[ROTATION_BUFF].begin(); iter != m_rotationMap[ROTATION_BUFF].end(); iter++)
-	{
-		if (*iter > 0 && !m_bot->HasAura(*iter) && m_bot->IsSpellReady(*iter) && m_ai->CastSpell(*iter, *m_bot)) {
-			std::string spellName(GetSpellStore()->LookupEntry<SpellEntry>(*iter)->SpellName[0]);
-			m_ai->TellMaster("Casting Buff " + spellName);
-			return RETURN_CONTINUE;
-		}
-	}
-
-	// buffs and debuffs handled - do next in our rotation.
-	//
-	if (m_rotationMap[ROTATION_NORMAL][m_combatRotationIndex] > 0 && m_bot->IsSpellReady(m_rotationMap[ROTATION_NORMAL][m_combatRotationIndex]) && m_ai->CastSpell(m_rotationMap[ROTATION_NORMAL][m_combatRotationIndex]))
-	{
-		std::string spellName(GetSpellStore()->LookupEntry<SpellEntry>(m_rotationMap[ROTATION_NORMAL][m_combatRotationIndex])->SpellName[0]);
-		m_ai->TellMaster("Casting Rotation -  " + spellName);
-		if (++m_combatRotationIndex == m_rotationMap[ROTATION_NORMAL].size())
-			m_combatRotationIndex = 0;
-		return RETURN_CONTINUE;
-	}
-	else {
-		// if we couldn't do our next rotation, leave the rotation index alone and try a heroic strike
-		//
-		if (HEROIC_STRIKE > 0 && m_ai->CastSpell(HEROIC_STRIKE, *pTarget))
-			return RETURN_CONTINUE;
-	}
-	return RETURN_NO_ACTION_OK;
-}
 
 // set the rotations  
 void PlayerbotWarriorAI::SetRotation(uint32 spec)
@@ -493,62 +431,77 @@ void PlayerbotWarriorAI::SetRotation(uint32 spec)
 			uint32 SUNDER = (DEVASTATE > 0 ? DEVASTATE : SUNDER_ARMOR);
 
 			// standard rotation for prot warrior
-			rotation.push_back(SHIELD_BASH);
-			rotation.push_back(SUNDER);
-			rotation.push_back(HEROIC_STRIKE);
-			m_rotationMap.insert(RotationMap::value_type(ROTATION_NORMAL, rotation));
+			if (SHIELD_BASH)
+				rotation.push_back(SHIELD_BASH);
+			if (SUNDER)
+				rotation.push_back(SUNDER);
+			if (HEROIC_STRIKE)
+				rotation.push_back(HEROIC_STRIKE);
 
 			// debuffs to keep on the target
-			debuffs.push_back(THUNDER_CLAP);
-			debuffs.push_back(DEMORALIZING_SHOUT);
-			m_rotationMap.insert(RotationMap::value_type(ROTATION_DEBUFF, debuffs));
+			if (THUNDER_CLAP)
+				debuffs.push_back(THUNDER_CLAP);
+			if (DEMORALIZING_SHOUT)
+				debuffs.push_back(DEMORALIZING_SHOUT);
 
 			// buffs to have up all the time.
-			buffs.push_back(BLOODRAGE);
-			buffs.push_back(BATTLE_SHOUT);
+			if (BLOODRAGE)
+				buffs.push_back(BLOODRAGE);
+			if (BATTLE_SHOUT)
+				buffs.push_back(BATTLE_SHOUT);
 			// shield block seems to be broken - says its ready when its not.
 			//buffs.push_back(SHIELD_BLOCK);
-			m_rotationMap.insert(RotationMap::value_type(ROTATION_BUFF, buffs));
 
 			// emergency skills 
-			lowHealthBuffs.push_back(LAST_STAND);
-			lowHealthBuffs.push_back(SHIELD_WALL);
-			m_rotationMap.insert(RotationMap::value_type(ROTATION_EMERGENCY, lowHealthBuffs));
+			if (LAST_STAND)
+				lowHealthBuffs.push_back(LAST_STAND);
+			if (SHIELD_WALL)
+				lowHealthBuffs.push_back(SHIELD_WALL);
 
 
 			return;
 		}
 		case WARRIOR_SPEC_ARMS:
 			// debuffs to keep on the target
-			debuffs.push_back(REND);
-			m_rotationMap.insert(RotationMap::value_type(ROTATION_DEBUFF, debuffs));
+			if (REND)
+				debuffs.push_back(REND);
 
 			// buffs to have up all the time.
-			buffs.push_back(BLOODRAGE);
-			buffs.push_back(BATTLE_SHOUT);
+			if (BLOODRAGE)
+				buffs.push_back(BLOODRAGE);
+			if (BATTLE_SHOUT)
+				buffs.push_back(BATTLE_SHOUT);
 
-			m_rotationMap.insert(RotationMap::value_type(ROTATION_BUFF, buffs));
 
 			// standard rotation for Arms warrior
-			rotation.push_back(MORTAL_STRIKE);
-			rotation.push_back(OVERPOWER);
-			rotation.push_back(EXECUTE);
-			rotation.push_back(BLADESTORM);
-			m_rotationMap.insert(RotationMap::value_type(ROTATION_NORMAL, rotation));
+			if (MORTAL_STRIKE)
+				rotation.push_back(MORTAL_STRIKE);
+			if (OVERPOWER)
+				rotation.push_back(OVERPOWER);
+			if (EXECUTE)
+				rotation.push_back(EXECUTE);
+			if (BLADESTORM)
+				rotation.push_back(BLADESTORM);
 			return;
 
 		case WARRIOR_SPEC_FURY:
 
 			// fury warrior pretty simple. out of rotation heroic strikes filled in above
 			//
-			rotation.push_back(BLOODTHIRST);
-			rotation.push_back(WHIRLWIND);
-			rotation.push_back(HEROIC_STRIKE);
+			if (BLOODTHIRST)
+				rotation.push_back(BLOODTHIRST);
+			if (WHIRLWIND)
+				rotation.push_back(WHIRLWIND);
+			if (HEROIC_STRIKE)
+				rotation.push_back(HEROIC_STRIKE);
 			break;
 		default:
 			break;
 	}
-
+	m_rotationMap[ROTATION_NORMAL] = rotation;
+	m_rotationMap[ROTATION_BUFF] = buffs;
+	m_rotationMap[ROTATION_DEBUFF] = debuffs;
+	m_rotationMap[ROTATION_EMERGENCY] = lowHealthBuffs;
 }
 CombatManeuverReturns PlayerbotWarriorAI::DoNextCombatManeuverPVP(Unit* pTarget)
 {
